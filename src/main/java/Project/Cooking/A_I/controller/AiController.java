@@ -1,6 +1,6 @@
 package Project.Cooking.A_I.controller;
 
-import Project.Cooking.A_I.service.OpenAiService;
+import Project.Cooking.A_I.service.GeminiService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -10,17 +10,19 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ai")
-@CrossOrigin(origins = "*") // ✅ helps if CORS is acting up
+@CrossOrigin(origins = "*")
 public class AiController {
 
-    private final OpenAiService openAiService;
+    private final GeminiService geminiService;
 
-    public AiController(OpenAiService openAiService) {
-        this.openAiService = openAiService;
+    public AiController(GeminiService geminiService) {
+        this.geminiService = geminiService;
     }
 
     @PostMapping("/guide")
-    public ResponseEntity<Map<String, Object>> guide(@RequestBody(required = false) Map<String, Object> body) {
+    public ResponseEntity<Map<String, Object>> guide(
+            @RequestBody(required = false) Map<String, Object> body
+    ) {
         if (body == null) body = new HashMap<>();
 
         String userText = String.valueOf(body.getOrDefault("userText", "")).trim();
@@ -35,9 +37,10 @@ public class AiController {
         }
 
         try {
-            String reply = openAiService.getCookingGuideReply(userText, recipeTitle, contextText);
+            String reply = geminiService.getCookingGuideReply(userText, recipeTitle, contextText);
             out.put("reply", reply);
             return ResponseEntity.ok(out);
+
         } catch (Exception e) {
             out.put("reply", "AI error. Try again.");
             out.put("error", e.getMessage());

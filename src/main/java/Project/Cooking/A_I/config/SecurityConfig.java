@@ -4,6 +4,7 @@ import Project.Cooking.A_I.security.JwtAuthFilter;
 import Project.Cooking.A_I.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -27,41 +28,45 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                .cors(cors -> {}) // ✅ enable cors support
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
 
-                        // ✅ PUBLIC: auth routes
+                        // ✅ IMPORTANT: allow preflight
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // ✅ AUTH
                         .requestMatchers("/api/auth/**").permitAll()
 
-                        // ✅ PUBLIC: feed browsing
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/feed", "/api/feed/**").permitAll()
+                        // ✅ FEED (PUBLIC)
+                        .requestMatchers(HttpMethod.GET, "/api/feed", "/api/feed/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/feed/*/view").permitAll()
 
-                        // ✅ PUBLIC: views
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/feed/*/view").permitAll()
+                        // ✅ SEARCH (PUBLIC)
+                        .requestMatchers(HttpMethod.GET, "/api/search", "/api/search/**").permitAll()
 
-                        // ✅ PUBLIC: misc
+                        // ✅ IMPORT (PUBLIC)
+                        .requestMatchers(HttpMethod.POST, "/api/import/**").permitAll()
+
+                        // ✅ AI (PUBLIC)
+                        .requestMatchers("/api/ai/**").permitAll()
+
+                        // ✅ RECIPES (PUBLIC READ)
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/recipes/**",
+                                "/api/recipes/public/**",
+                                "/api/recipes/count",
+                                "/api/recipes/public-count"
+                        ).permitAll()
+
+                        // 🔐 PROTECTED
+                        .requestMatchers("/api/likes/**").authenticated()
+                        .requestMatchers("/api/history/**").authenticated()
+
+                        // MISC
                         .requestMatchers("/error", "/favicon.ico").permitAll()
 
-                        // 🔐 PROTECTED: likes need login
-                        .requestMatchers("/api/likes", "/api/likes/**").authenticated()
-                        .requestMatchers("/api/history/**").authenticated()
-                        .requestMatchers("/api/external/**").permitAll()
-                        // ✅ TEMP: allow admin seed while developing
-                        .requestMatchers("/api/admin/**").permitAll()
-                        // ✅ PUBLIC: recipe counts / reads
-                        .requestMatchers(org.springframework.http.HttpMethod.GET,
-                                "/api/recipes/count",
-                                "/api/recipes/public-count",
-                                "/api/recipes/**"
-                        ).permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/recipes/public/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/recipes/count").permitAll()
-
-
-
-
-
-                        // 🔐 everything else needs login
+                        // 🔐 EVERYTHING ELSE
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

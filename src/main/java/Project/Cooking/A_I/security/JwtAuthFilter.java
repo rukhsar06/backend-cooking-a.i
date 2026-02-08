@@ -33,13 +33,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // ✅ allow auth endpoints without token
-        if (path.startsWith("/api/auth/")) {
+        // ✅ HARD BYPASS for public routes (JWT must not interfere)
+        if (path.startsWith("/api/auth/")
+                || path.startsWith("/api/feed")
+                || path.startsWith("/api/search")
+                || path.startsWith("/api/recipes")
+                || path.startsWith("/api/import")
+                || path.startsWith("/api/ai")
+                || path.equals("/error")
+        ) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // ✅ if user is already authenticated, don't re-authenticate
+        // ✅ already authenticated
         if (SecurityContextHolder.getContext().getAuthentication() != null) {
             filterChain.doFilter(request, response);
             return;
@@ -47,7 +54,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
-        // ✅ no token -> continue (Spring Security will return 401 if endpoint requires auth)
+        // ✅ no token -> just continue (SecurityConfig will block if needed)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -55,16 +62,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring(7);
 
-        // ✅ invalid token -> 401
+        // ✅ invalid token -> continue (let Security return 401)
         if (!jwtUtil.isTokenValid(token)) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Invalid token");
+            filterChain.doFilter(request, response);
             return;
         }
 
         String email = jwtUtil.extractEmail(token);
 
-        if (email != null) {
+        if (email != null && !email.isBlank()) {
             UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
             UsernamePasswordAuthenticationToken authToken =
