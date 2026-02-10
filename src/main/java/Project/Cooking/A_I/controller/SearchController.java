@@ -1,6 +1,6 @@
 package Project.Cooking.A_I.controller;
 
-import Project.Cooking.A_I.model.Recipe;
+import Project.Cooking.A_I.dto.FeedRecipeDto;
 import Project.Cooking.A_I.model.User;
 import Project.Cooking.A_I.repository.RecipeLikeRepository;
 import Project.Cooking.A_I.repository.RecipeRepository;
@@ -62,28 +62,30 @@ public class SearchController {
                     .orElse(null);
         }
 
-        // 1) LOCAL search
-        List<Recipe> local = recipeRepository
-                .findByIsPublicTrueAndTitleContainingIgnoreCaseOrderByLikesDescViewsDescCreatedAtDesc(
-                        query, PageRequest.of(page, size)
-                );
+        var pageable = PageRequest.of(page, size);
 
-        // Optional tag search
+        // ✅ 1) LOCAL search (DTO ONLY -> avoids LOB crash)
+        List<FeedRecipeDto> local = recipeRepository.searchTitle(query, pageable);
+
+        // Optional tag search top-up (also DTO)
         if (local.size() < size) {
-            List<Recipe> tagMatches = recipeRepository
-                    .findByIsPublicTrueAndTagsContainingIgnoreCaseOrderByLikesDescViewsDescCreatedAtDesc(
-                            query, PageRequest.of(page, size)
-                    );
+            List<FeedRecipeDto> tagMatches = recipeRepository.searchTags(query, pageable);
 
-            Set<Long> seen = new HashSet<>(local.stream().map(Recipe::getId).toList());
-            for (Recipe r : tagMatches) {
-                if (seen.add(r.getId())) local.add(r);
+            Set<Long> seen = new HashSet<>();
+            for (FeedRecipeDto d : local) seen.add(d.getId());
+
+            for (FeedRecipeDto d : tagMatches) {
+                if (d.getId() != null && seen.add(d.getId())) {
+                    local.add(d);
+                }
                 if (local.size() >= size) break;
             }
         }
 
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Recipe r : local) {
+
+        for (FeedRecipeDto r : local) {
+            // keep your likes logic same (count from likes table)
             long likesCount = likeRepository.countByRecipeId(r.getId());
             boolean likedByMe = false;
 
@@ -108,7 +110,7 @@ public class SearchController {
             out.add(m);
         }
 
-        // 2) TOP UP WITH SPOONACULAR (BUT NEVER CRASH)
+        // ✅ 2) TOP UP WITH SPOONACULAR (never crash)
         int remaining = size - out.size();
         String externalError = null;
 
@@ -138,7 +140,6 @@ public class SearchController {
                     }
                 }
             } catch (Exception ex) {
-                // 🔥 key part: don't 500, just return local results
                 externalError = ex.getMessage();
             }
         }
