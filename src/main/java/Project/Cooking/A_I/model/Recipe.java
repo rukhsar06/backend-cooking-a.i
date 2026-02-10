@@ -14,20 +14,22 @@ public class Recipe {
     @Column(nullable = false)
     private String title;
 
+    // 🔥 CRITICAL FIX: LAZY LOBs (Postgres-safe)
     @Lob
+    @Basic(fetch = FetchType.LAZY)
     @Column(nullable = false, columnDefinition = "TEXT")
     private String ingredients;
 
     @Lob
+    @Basic(fetch = FetchType.LAZY)
     @Column(nullable = false, columnDefinition = "TEXT")
     private String steps;
 
-    // ---------- Feed fields ----------
     @Column(nullable = false)
     private boolean isPublic = false;
 
     @Column(nullable = false)
-    private String source = "USER"; // USER, AI, CURATED, MEALDB
+    private String source = "USER";
 
     @Column(columnDefinition = "TEXT")
     private String imageUrl;
@@ -41,16 +43,14 @@ public class Recipe {
     @Column(nullable = false)
     private long views = 0;
 
-    // ✅ external id for imported recipes (MealDB id)
     @Column
     private String externalId;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    // ✅ THIS MUST EXIST (nullable, because MealDB recipes have no user)
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "user_id", nullable = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private User user;
 
     @PrePersist
@@ -58,7 +58,7 @@ public class Recipe {
         this.createdAt = LocalDateTime.now();
     }
 
-    // ----- Getters / Setters -----
+    // Getters & Setters
     public Long getId() { return id; }
     public String getTitle() { return title; }
     public String getIngredients() { return ingredients; }
