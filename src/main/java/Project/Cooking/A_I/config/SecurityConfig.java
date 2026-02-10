@@ -38,12 +38,15 @@ public class SecurityConfig {
                         // ✅ preflight
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                        // ✅ ROOT / HEALTH (fix your 403 at base URL)
+                        .requestMatchers(HttpMethod.GET, "/", "/health").permitAll()
+
                         // ✅ AUTH
                         .requestMatchers("/api/auth/**").permitAll()
 
                         // ✅ FEED (PUBLIC)
                         .requestMatchers(HttpMethod.GET, "/api/feed", "/api/feed/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/feed/*/view").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/feed/**/view").permitAll()
 
                         // ✅ SEARCH (PUBLIC)
                         .requestMatchers(HttpMethod.GET, "/api/search", "/api/search/**").permitAll()
@@ -79,7 +82,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // 🔥 THIS IS THE FIX
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

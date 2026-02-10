@@ -34,8 +34,7 @@ public class SearchController {
         this.spoonacularClient = spoonacularClient;
     }
 
-    // ✅ HYBRID SEARCH
-    // GET /api/search?q=maggie&page=0&size=20
+    // GET /api/search?q=chicken&page=0&size=20
     @GetMapping("/search")
     public ResponseEntity<?> hybridSearch(
             @RequestParam String q,
@@ -45,11 +44,15 @@ public class SearchController {
     ) {
         if (page < 0) page = 0;
         if (size < 1) size = 1;
-        if (size > 50) size = 50; // keep external usage sane
+        if (size > 50) size = 50;
 
         String query = (q == null) ? "" : q.trim();
         if (query.isBlank()) {
-            return ResponseEntity.ok(Map.of("items", List.of()));
+            return ResponseEntity.ok(Map.of(
+                    "items", List.of(),
+                    "localCount", 0,
+                    "externalCount", 0
+            ));
         }
 
         Long myUserId = null;
@@ -59,20 +62,19 @@ public class SearchController {
                     .orElse(null);
         }
 
-        // 1) LOCAL search first
+        // 1) LOCAL search
         List<Recipe> local = recipeRepository
                 .findByIsPublicTrueAndTitleContainingIgnoreCaseOrderByLikesDescViewsDescCreatedAtDesc(
                         query, PageRequest.of(page, size)
                 );
 
-        // Optional tag search (only if tags is String)
+        // Optional tag search
         if (local.size() < size) {
             List<Recipe> tagMatches = recipeRepository
                     .findByIsPublicTrueAndTagsContainingIgnoreCaseOrderByLikesDescViewsDescCreatedAtDesc(
                             query, PageRequest.of(page, size)
                     );
 
-            // merge without duplicates
             Set<Long> seen = new HashSet<>(local.stream().map(Recipe::getId).toList());
             for (Recipe r : tagMatches) {
                 if (seen.add(r.getId())) local.add(r);
@@ -106,35 +108,47 @@ public class SearchController {
             out.add(m);
         }
 
-        // 2) If local < size, top up with Spoonacular results
+        // 2) TOP UP WITH SPOONACULAR (BUT NEVER CRASH)
         int remaining = size - out.size();
+        String externalError = null;
+
         if (remaining > 0) {
-            int offset = page * size; // works fine for demo
-            var external = spoonacularClient.search(query, remaining, offset);
+            int offset = page * size;
 
-            for (var e : external) {
-                Map<String, Object> m = new HashMap<>();
-                m.put("id", null); // no local id
-                m.put("title", e.getTitle());
-                m.put("imageUrl", e.getImageUrl());
-                m.put("tags", null);
-                m.put("likes", 0);
-                m.put("likedByMe", false);
-                m.put("views", 0);
-                m.put("source", "SPOONACULAR");
-                m.put("createdAt", null);
+            try {
+                var external = spoonacularClient.search(query, remaining, offset);
 
-                m.put("isExternal", true);
-                m.put("externalId", e.getExternalId());
+                if (external != null) {
+                    for (var e : external) {
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("id", null);
+                        m.put("title", e.getTitle());
+                        m.put("imageUrl", e.getImageUrl());
+                        m.put("tags", null);
+                        m.put("likes", 0);
+                        m.put("likedByMe", false);
+                        m.put("views", 0);
+                        m.put("source", "SPOONACULAR");
+                        m.put("createdAt", null);
 
-                out.add(m);
+                        m.put("isExternal", true);
+                        m.put("externalId", e.getExternalId());
+
+                        out.add(m);
+                    }
+                }
+            } catch (Exception ex) {
+                // 🔥 key part: don't 500, just return local results
+                externalError = ex.getMessage();
             }
         }
 
-        return ResponseEntity.ok(Map.of(
-                "items", out,
-                "localCount", local.size(),
-                "externalCount", Math.max(0, out.size() - local.size())
-        ));
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("items", out);
+        resp.put("localCount", local.size());
+        resp.put("externalCount", Math.max(0, out.size() - local.size()));
+        if (externalError != null) resp.put("externalError", externalError);
+
+        return ResponseEntity.ok(resp);
     }
 }
