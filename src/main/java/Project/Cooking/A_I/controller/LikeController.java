@@ -48,11 +48,10 @@ public class LikeController {
 
         User user = me(auth);
 
-        // validate recipe exists (404, not 500)
         recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
 
-        var existing = likeRepository.findByUserIdAndRecipeId(user.getId(), recipeId);
+        var existing = likeRepository.findByUser_IdAndRecipe_Id(user.getId(), recipeId);
 
         boolean likedNow;
 
@@ -63,7 +62,6 @@ public class LikeController {
             RecipeLike rl = new RecipeLike();
             rl.setUser(user);
 
-            // safe managed ref
             Recipe recipeRef = recipeRepository.getReferenceById(recipeId);
             rl.setRecipe(recipeRef);
 
@@ -71,11 +69,7 @@ public class LikeController {
             likedNow = true;
         }
 
-        long likesCount = likeRepository.countByRecipeId(recipeId);
-
-        // ✅ IMPORTANT: do NOT call recipeRepository.updateLikes here
-        // It causes 500 on Render for many setups (query mismatch / column mismatch / dialect).
-        // Just return the count.
+        long likesCount = likeRepository.countByRecipe_Id(recipeId);
 
         return ResponseEntity.ok(Map.of(
                 "recipeId", recipeId,
@@ -89,7 +83,7 @@ public class LikeController {
     public ResponseEntity<?> myLikes(Authentication auth) {
         User user = me(auth);
 
-        var likedRecipes = likeRepository.findByUserId(user.getId());
+        var likedRecipes = likeRepository.findByUser_Id(user.getId());
 
         var out = likedRecipes.stream().map(rl -> {
             Recipe r = rl.getRecipe();
@@ -97,7 +91,7 @@ public class LikeController {
                     "id", r.getId(),
                     "title", r.getTitle(),
                     "imageUrl", r.getImageUrl(),
-                    "likes", likeRepository.countByRecipeId(r.getId()) // always correct
+                    "likes", likeRepository.countByRecipe_Id(r.getId())
             );
         }).toList();
 
