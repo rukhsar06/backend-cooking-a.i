@@ -93,9 +93,37 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
     """)
     List<FeedRecipeDto> searchTags(@Param("q") String q, Pageable pageable);
 
-    // ✅ ADD THIS (Fix likes update without saving whole Recipe entity)
+    // ✅ likes update (keep if you still use it somewhere)
     @Modifying
     @Transactional
     @Query("UPDATE Recipe r SET r.likes = :likes WHERE r.id = :id")
     int updateLikes(@Param("id") Long id, @Param("likes") long likes);
+
+    // ✅ FIX: increment views without loading LOB entity
+    @Modifying
+    @Transactional
+    @Query("UPDATE Recipe r SET r.views = r.views + 1 WHERE r.id = :id AND r.isPublic = true")
+    int incrementViewsPublic(@Param("id") Long id);
+
+    // ✅ read views only
+    @Query("SELECT r.views FROM Recipe r WHERE r.id = :id")
+    long getViews(@Param("id") Long id);
+
+    // ✅ history-safe lightweight read (NO LOB touched)
+    @Query("""
+        SELECT new Project.Cooking.A_I.dto.FeedRecipeDto(
+            r.id,
+            r.title,
+            r.imageUrl,
+            r.tags,
+            r.likes,
+            false,
+            r.views,
+            r.source,
+            r.createdAt
+        )
+        FROM Recipe r
+        WHERE r.id IN :ids
+    """)
+    List<FeedRecipeDto> findLightByIds(@Param("ids") List<Long> ids);
 }

@@ -8,7 +8,7 @@ import java.util.Optional;
 
 public interface RecipeHistoryRepository extends JpaRepository<RecipeHistory, Long> {
 
-    Optional<RecipeHistory> findByUserIdAndRecipeId(Long userId, Long recipeId);
+    Optional<RecipeHistory> findByUser_IdAndRecipe_Id(Long userId, Long recipeId);
 
-    List<RecipeHistory> findByUserIdOrderByLastViewedAtDesc(Long userId);
+    List<RecipeHistory> findByUser_IdOrderByLastViewedAtDesc(Long userId);
 }

@@ -1,7 +1,6 @@
 package Project.Cooking.A_I.controller;
 
 import Project.Cooking.A_I.dto.FeedRecipeDto;
-import Project.Cooking.A_I.model.Recipe;
 import Project.Cooking.A_I.repository.RecipeLikeRepository;
 import Project.Cooking.A_I.repository.RecipeRepository;
 import Project.Cooking.A_I.repository.UserRepository;
@@ -33,26 +32,33 @@ public class FeedController {
         this.userRepository = userRepository;
     }
 
+    // GET /api/feed/count
     @GetMapping("/count")
     public ResponseEntity<?> count() {
         long totalPublic = recipeRepository.countByIsPublicTrue();
         return ResponseEntity.ok(Map.of("publicCount", totalPublic));
     }
 
+    // ✅ PUBLIC: increment views (LOB-safe)
+    // POST /api/feed/{id}/view
     @PostMapping("/{id}/view")
     public ResponseEntity<?> view(@PathVariable Long id) {
-        Recipe r = recipeRepository.findByIdAndIsPublicTrue(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Public recipe not found"));
 
-        r.setViews(r.getViews() + 1);
-        recipeRepository.save(r);
+        // Update without loading Recipe entity (prevents LOB stream crash)
+        int updated = recipeRepository.incrementViewsPublic(id);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Public recipe not found");
+        }
+
+        long views = recipeRepository.getViews(id);
 
         return ResponseEntity.ok(Map.of(
-                "id", r.getId(),
-                "views", r.getViews()
+                "id", id,
+                "views", views
         ));
     }
 
+    // GET /api/feed?page=0&size=20
     @GetMapping
     public ResponseEntity<?> feed(
             @RequestParam(defaultValue = "0") int page,
@@ -91,6 +97,7 @@ public class FeedController {
         return ResponseEntity.ok(items);
     }
 
+    // GET /api/feed/search?q=abc&type=title|tags&page=0&size=20
     @GetMapping("/search")
     public ResponseEntity<?> search(
             @RequestParam String q,

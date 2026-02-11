@@ -1,6 +1,6 @@
 package Project.Cooking.A_I.controller;
 
-import Project.Cooking.A_I.model.Recipe;
+import Project.Cooking.A_I.dto.FeedRecipeDto;
 import Project.Cooking.A_I.model.RecipeHistory;
 import Project.Cooking.A_I.model.User;
 import Project.Cooking.A_I.repository.RecipeHistoryRepository;
@@ -14,7 +14,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/history")
@@ -49,16 +50,16 @@ public class HistoryController {
     public ResponseEntity<?> track(@PathVariable Long recipeId, Authentication auth) {
         User user = me(auth);
 
-        // validate recipe exists
+        // validate recipe exists (404 instead of 500)
         recipeRepo.findById(recipeId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
 
-        var existing = historyRepo.findByUserIdAndRecipeId(user.getId(), recipeId);
+        var existing = historyRepo.findByUser_IdAndRecipe_Id(user.getId(), recipeId);
 
         RecipeHistory h = existing.orElseGet(RecipeHistory::new);
         h.setUser(user);
 
-        // ✅ avoid loading full recipe fields (LOB safety)
+        // ✅ do NOT load full recipe (LOB safety)
         h.setRecipe(recipeRepo.getReferenceById(recipeId));
 
         h.setLastViewedAt(LocalDateTime.now());
@@ -69,22 +70,46 @@ public class HistoryController {
 
     // GET /api/history
     @GetMapping
+    @Transactional(readOnly = true)
     public ResponseEntity<?> myHistory(Authentication auth) {
         User user = me(auth);
 
-        var list = historyRepo.findByUserIdOrderByLastViewedAtDesc(user.getId());
+        var list = historyRepo.findByUser_IdOrderByLastViewedAtDesc(user.getId());
 
-        var out = list.stream().map(h -> {
-            Recipe r = h.getRecipe();
-            return Map.of(
-                    "id", r.getId(),
-                    "title", r.getTitle(),
-                    "imageUrl", r.getImageUrl(),
-                    "likes", r.getLikes(),
-                    "views", r.getViews(),
+        // Extract IDs in order
+        List<Long> ids = list.stream()
+                .map(h -> h.getRecipe().getId())
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (ids.isEmpty()) return ResponseEntity.ok(List.of());
+
+        // Fetch lightweight recipe rows (DTO) -> no LOB touched
+        List<FeedRecipeDto> light = recipeRepo.findLightByIds(ids);
+
+        Map<Long, FeedRecipeDto> byId = light.stream()
+                .collect(Collectors.toMap(FeedRecipeDto::id, x -> x));
+
+        // Return in history order
+        List<Map<String, Object>> out = new ArrayList<>();
+
+        for (RecipeHistory h : list) {
+            Long rid = h.getRecipe().getId();
+            FeedRecipeDto r = byId.get(rid);
+            if (r == null) continue;
+
+            out.add(Map.of(
+                    "id", r.id(),
+                    "title", r.title(),
+                    "imageUrl", r.imageUrl(),
+                    "tags", r.tags(),
+                    "likes", r.likes(),
+                    "views", r.views(),
+                    "source", r.source(),
+                    "createdAt", r.createdAt() == null ? null : r.createdAt().toString(),
                     "lastViewedAt", h.getLastViewedAt() == null ? null : h.getLastViewedAt().toString()
-            );
-        }).toList();
+            ));
+        }
 
         return ResponseEntity.ok(out);
     }
@@ -95,7 +120,7 @@ public class HistoryController {
     public ResponseEntity<?> remove(@PathVariable Long recipeId, Authentication auth) {
         User user = me(auth);
 
-        var existing = historyRepo.findByUserIdAndRecipeId(user.getId(), recipeId);
+        var existing = historyRepo.findByUser_IdAndRecipe_Id(user.getId(), recipeId);
         existing.ifPresent(historyRepo::delete);
 
         return ResponseEntity.ok(Map.of(
