@@ -48,7 +48,7 @@ public class LikeController {
 
         User user = me(auth);
 
-        // validate recipe exists
+        // validate recipe exists (404, not 500)
         recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
 
@@ -63,7 +63,7 @@ public class LikeController {
             RecipeLike rl = new RecipeLike();
             rl.setUser(user);
 
-            // important: link with a managed Recipe entity reference (safe)
+            // safe managed ref
             Recipe recipeRef = recipeRepository.getReferenceById(recipeId);
             rl.setRecipe(recipeRef);
 
@@ -73,8 +73,9 @@ public class LikeController {
 
         long likesCount = likeRepository.countByRecipeId(recipeId);
 
-        // ✅ DO NOT save whole Recipe entity (can trigger LOB/lazy/session issues)
-        recipeRepository.updateLikes(recipeId, likesCount);
+        // ✅ IMPORTANT: do NOT call recipeRepository.updateLikes here
+        // It causes 500 on Render for many setups (query mismatch / column mismatch / dialect).
+        // Just return the count.
 
         return ResponseEntity.ok(Map.of(
                 "recipeId", recipeId,
@@ -84,6 +85,7 @@ public class LikeController {
     }
 
     @GetMapping
+    @Transactional(readOnly = true)
     public ResponseEntity<?> myLikes(Authentication auth) {
         User user = me(auth);
 
@@ -95,7 +97,7 @@ public class LikeController {
                     "id", r.getId(),
                     "title", r.getTitle(),
                     "imageUrl", r.getImageUrl(),
-                    "likes", r.getLikes()
+                    "likes", likeRepository.countByRecipeId(r.getId()) // always correct
             );
         }).toList();
 
