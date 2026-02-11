@@ -32,11 +32,12 @@ public class LikeController {
     }
 
     private User me(Authentication auth) {
-        if (auth == null || !auth.isAuthenticated()) {
+        if (auth == null || !auth.isAuthenticated() || auth.getName() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required");
         }
 
-        String email = auth.getName();
+        String email = auth.getName().trim().toLowerCase();
+
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
     }
@@ -47,8 +48,8 @@ public class LikeController {
 
         User user = me(auth);
 
-        // Only to validate recipe exists
-        Recipe recipe = recipeRepository.findById(recipeId)
+        // validate recipe exists
+        recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
 
         var existing = likeRepository.findByUserIdAndRecipeId(user.getId(), recipeId);
@@ -61,14 +62,18 @@ public class LikeController {
         } else {
             RecipeLike rl = new RecipeLike();
             rl.setUser(user);
-            rl.setRecipe(recipe);
+
+            // important: link with a managed Recipe entity reference (safe)
+            Recipe recipeRef = recipeRepository.getReferenceById(recipeId);
+            rl.setRecipe(recipeRef);
+
             likeRepository.save(rl);
             likedNow = true;
         }
 
         long likesCount = likeRepository.countByRecipeId(recipeId);
 
-        // ✅ critical: DO NOT save whole Recipe (can trigger LOB / session issues)
+        // ✅ DO NOT save whole Recipe entity (can trigger LOB/lazy/session issues)
         recipeRepository.updateLikes(recipeId, likesCount);
 
         return ResponseEntity.ok(Map.of(

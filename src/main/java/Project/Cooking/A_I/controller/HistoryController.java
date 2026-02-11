@@ -9,6 +9,7 @@ import Project.Cooking.A_I.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -32,34 +33,40 @@ public class HistoryController {
     }
 
     private User me(Authentication auth) {
-        if (auth == null || !auth.isAuthenticated()) {
+        if (auth == null || !auth.isAuthenticated() || auth.getName() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required");
         }
-        return userRepo.findByEmail(auth.getName())
+
+        String email = auth.getName().trim().toLowerCase();
+
+        return userRepo.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
     }
 
-    // ✅ Track history when recipe detail opened
     // POST /api/history/{recipeId}
     @PostMapping("/{recipeId}")
+    @Transactional
     public ResponseEntity<?> track(@PathVariable Long recipeId, Authentication auth) {
         User user = me(auth);
 
-        Recipe recipe = recipeRepo.findById(recipeId)
+        // validate recipe exists
+        recipeRepo.findById(recipeId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
 
         var existing = historyRepo.findByUserIdAndRecipeId(user.getId(), recipeId);
 
         RecipeHistory h = existing.orElseGet(RecipeHistory::new);
         h.setUser(user);
-        h.setRecipe(recipe);
+
+        // ✅ avoid loading full recipe fields (LOB safety)
+        h.setRecipe(recipeRepo.getReferenceById(recipeId));
+
         h.setLastViewedAt(LocalDateTime.now());
         historyRepo.save(h);
 
         return ResponseEntity.ok(Map.of("recipeId", recipeId, "tracked", true));
     }
 
-    // ✅ Get my history
     // GET /api/history
     @GetMapping
     public ResponseEntity<?> myHistory(Authentication auth) {
@@ -82,14 +89,13 @@ public class HistoryController {
         return ResponseEntity.ok(out);
     }
 
-    // ✅ Delete ONE history item
     // DELETE /api/history/{recipeId}
     @DeleteMapping("/{recipeId}")
+    @Transactional
     public ResponseEntity<?> remove(@PathVariable Long recipeId, Authentication auth) {
         User user = me(auth);
 
         var existing = historyRepo.findByUserIdAndRecipeId(user.getId(), recipeId);
-
         existing.ifPresent(historyRepo::delete);
 
         return ResponseEntity.ok(Map.of(
