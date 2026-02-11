@@ -30,7 +30,6 @@ public class LikeController {
         this.userRepository = userRepository;
     }
 
-
     private User me(Authentication auth) {
         if (auth == null || !auth.isAuthenticated()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Login required");
@@ -66,7 +65,8 @@ public class LikeController {
 
         long likesCount = likeRepository.countByRecipeId(recipeId);
 
-        recipe.setLikes((int) likesCount);
+        // ✅ FIX: don't cast to int
+        recipe.setLikes(likesCount);
         recipeRepository.save(recipe);
 
         return ResponseEntity.ok(Map.of(

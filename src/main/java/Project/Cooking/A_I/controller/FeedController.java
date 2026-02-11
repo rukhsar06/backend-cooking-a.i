@@ -1,13 +1,16 @@
 package Project.Cooking.A_I.controller;
 
 import Project.Cooking.A_I.dto.FeedRecipeDto;
+import Project.Cooking.A_I.model.Recipe;
 import Project.Cooking.A_I.repository.RecipeLikeRepository;
 import Project.Cooking.A_I.repository.RecipeRepository;
 import Project.Cooking.A_I.repository.UserRepository;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -35,6 +38,22 @@ public class FeedController {
     public ResponseEntity<?> count() {
         long totalPublic = recipeRepository.countByIsPublicTrue();
         return ResponseEntity.ok(Map.of("publicCount", totalPublic));
+    }
+
+    // ✅ PUBLIC: increment views
+    // POST /api/feed/{id}/view
+    @PostMapping("/{id}/view")
+    public ResponseEntity<?> view(@PathVariable Long id) {
+        Recipe r = recipeRepository.findByIdAndIsPublicTrue(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Public recipe not found"));
+
+        r.setViews(r.getViews() + 1);
+        recipeRepository.save(r);
+
+        return ResponseEntity.ok(Map.of(
+                "id", r.getId(),
+                "views", r.getViews()
+        ));
     }
 
     // GET /api/feed?page=0&size=20
