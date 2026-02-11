@@ -46,7 +46,8 @@ public class SecurityConfig {
 
                         // ✅ FEED (PUBLIC)
                         .requestMatchers(HttpMethod.GET, "/api/feed", "/api/feed/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/feed/**/view").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/feed/*/view").permitAll()
+
 
                         // ✅ SEARCH (PUBLIC)
                         .requestMatchers(HttpMethod.GET, "/api/search", "/api/search/**").permitAll()
