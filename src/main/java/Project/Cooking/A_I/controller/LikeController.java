@@ -9,6 +9,7 @@ import Project.Cooking.A_I.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -41,10 +42,12 @@ public class LikeController {
     }
 
     @PostMapping("/{recipeId}")
+    @Transactional
     public ResponseEntity<?> toggle(@PathVariable Long recipeId, Authentication auth) {
 
         User user = me(auth);
 
+        // Only to validate recipe exists
         Recipe recipe = recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Recipe not found"));
 
@@ -65,9 +68,8 @@ public class LikeController {
 
         long likesCount = likeRepository.countByRecipeId(recipeId);
 
-        // ✅ FIX: don't cast to int
-        recipe.setLikes(likesCount);
-        recipeRepository.save(recipe);
+        // ✅ critical: DO NOT save whole Recipe (can trigger LOB / session issues)
+        recipeRepository.updateLikes(recipeId, likesCount);
 
         return ResponseEntity.ok(Map.of(
                 "recipeId", recipeId,

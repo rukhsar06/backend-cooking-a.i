@@ -7,6 +7,7 @@ import Project.Cooking.A_I.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,7 +26,6 @@ public class RecipeController {
         this.userRepository = userRepository;
     }
 
-    // DTO for create request
     public static class CreateRecipeRequest {
         public String title;
         public String ingredients;
@@ -45,7 +45,6 @@ public class RecipeController {
                 ));
     }
 
-    // ✅ Create recipe (PRIVATE, owned by user)
     @PostMapping
     public ResponseEntity<?> create(@RequestBody CreateRecipeRequest req, Authentication authentication) {
         User user = getCurrentUser(authentication);
@@ -61,8 +60,6 @@ public class RecipeController {
         recipe.setIngredients(req.ingredients.trim());
         recipe.setSteps(req.steps.trim());
         recipe.setUser(user);
-
-        // default private unless you later add a toggle endpoint
         recipe.setPublic(false);
 
         Recipe saved = recipeRepository.save(recipe);
@@ -76,7 +73,6 @@ public class RecipeController {
         ));
     }
 
-    // ✅ List my recipes (PRIVATE)
     @GetMapping
     public ResponseEntity<?> list(Authentication authentication) {
         User user = getCurrentUser(authentication);
@@ -94,7 +90,6 @@ public class RecipeController {
         return ResponseEntity.ok(out);
     }
 
-    // ✅ Get one of MY recipes (PRIVATE, owned by user)
     @GetMapping("/{id}")
     public ResponseEntity<?> getOne(@PathVariable Long id, Authentication authentication) {
         User user = getCurrentUser(authentication);
@@ -111,7 +106,6 @@ public class RecipeController {
         ));
     }
 
-    // ✅ Delete one of MY recipes (PRIVATE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id, Authentication authentication) {
         User user = getCurrentUser(authentication);
@@ -123,9 +117,9 @@ public class RecipeController {
         return ResponseEntity.ok(Map.of("message", "Deleted", "id", id));
     }
 
-    // ✅ PUBLIC: details for FEED recipes (MEALDB/CURATED/public ones)
-    // GET /api/recipes/public/{id}
+    // ✅ PUBLIC: details for FEED recipes
     @GetMapping("/public/{id}")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> getPublic(@PathVariable Long id) {
 
         Recipe r = recipeRepository.findByIdAndIsPublicTrue(id)
@@ -144,7 +138,6 @@ public class RecipeController {
         ));
     }
 
-    // ✅ PUBLIC: count (optional but useful)
     @GetMapping("/count")
     public ResponseEntity<?> countPublic() {
         return ResponseEntity.ok(Map.of("publicCount", recipeRepository.countByIsPublicTrue()));

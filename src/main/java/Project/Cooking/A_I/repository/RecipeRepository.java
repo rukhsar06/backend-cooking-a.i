@@ -5,6 +5,9 @@ import Project.Cooking.A_I.model.Recipe;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,13 +25,11 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
     Optional<Recipe> findBySourceAndExternalId(String source, String externalId);
 
     // ----------------- ✅ REQUIRED BY SearchController -----------------
-    // Local search by TITLE (public only) + ordered like feed
     List<Recipe> findByIsPublicTrueAndTitleContainingIgnoreCaseOrderByLikesDescViewsDescCreatedAtDesc(
             String q,
             Pageable pageable
     );
 
-    // Local search by TAGS (public only) + ordered like feed
     List<Recipe> findByIsPublicTrueAndTagsContainingIgnoreCaseOrderByLikesDescViewsDescCreatedAtDesc(
             String q,
             Pageable pageable
@@ -70,7 +71,7 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
           AND LOWER(r.title) LIKE LOWER(CONCAT('%', :q, '%'))
         ORDER BY r.likes DESC, r.views DESC, r.createdAt DESC
     """)
-    List<FeedRecipeDto> searchTitle(String q, Pageable pageable);
+    List<FeedRecipeDto> searchTitle(@Param("q") String q, Pageable pageable);
 
     @Query("""
         SELECT new Project.Cooking.A_I.dto.FeedRecipeDto(
@@ -90,5 +91,11 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
           AND LOWER(r.tags) LIKE LOWER(CONCAT('%', :q, '%'))
         ORDER BY r.likes DESC, r.views DESC, r.createdAt DESC
     """)
-    List<FeedRecipeDto> searchTags(String q, Pageable pageable);
+    List<FeedRecipeDto> searchTags(@Param("q") String q, Pageable pageable);
+
+    // ✅ ADD THIS (Fix likes update without saving whole Recipe entity)
+    @Modifying
+    @Transactional
+    @Query("UPDATE Recipe r SET r.likes = :likes WHERE r.id = :id")
+    int updateLikes(@Param("id") Long id, @Param("likes") long likes);
 }
