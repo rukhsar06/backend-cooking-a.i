@@ -34,7 +34,6 @@ public class SearchController {
         this.spoonacularClient = spoonacularClient;
     }
 
-    // GET /api/search?q=chicken&page=0&size=20
     @GetMapping("/search")
     public ResponseEntity<?> hybridSearch(
             @RequestParam String q,
@@ -63,13 +62,11 @@ public class SearchController {
 
         var pageable = PageRequest.of(page, size);
 
-        // ✅ LOCAL SEARCH (DTO ONLY – no LOB crash)
         List<FeedRecipeDto> local = recipeRepository.searchTitle(query, pageable);
 
         if (local.size() < size) {
             List<FeedRecipeDto> tagMatches = recipeRepository.searchTags(query, pageable);
             Set<Long> seen = new HashSet<>();
-
             for (FeedRecipeDto d : local) seen.add(d.id());
 
             for (FeedRecipeDto d : tagMatches) {
@@ -83,12 +80,12 @@ public class SearchController {
         List<Map<String, Object>> out = new ArrayList<>();
 
         for (FeedRecipeDto r : local) {
-            long likesCount = likeRepository.countByRecipeId(r.id());
+            long likesCount = likeRepository.countByRecipe_Id(r.id());
             boolean likedByMe = false;
 
             if (myUserId != null) {
                 likedByMe = likeRepository
-                        .findByUserIdAndRecipeId(myUserId, r.id())
+                        .findByUser_IdAndRecipe_Id(myUserId, r.id())
                         .isPresent();
             }
 
@@ -108,7 +105,6 @@ public class SearchController {
             out.add(m);
         }
 
-        // ✅ Spoonacular top-up (never crash)
         int remaining = size - out.size();
 
         if (remaining > 0) {

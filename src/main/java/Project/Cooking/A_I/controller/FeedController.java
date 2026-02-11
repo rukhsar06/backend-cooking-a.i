@@ -33,15 +33,12 @@ public class FeedController {
         this.userRepository = userRepository;
     }
 
-    // GET /api/feed/count
     @GetMapping("/count")
     public ResponseEntity<?> count() {
         long totalPublic = recipeRepository.countByIsPublicTrue();
         return ResponseEntity.ok(Map.of("publicCount", totalPublic));
     }
 
-    // ✅ PUBLIC: increment views
-    // POST /api/feed/{id}/view
     @PostMapping("/{id}/view")
     public ResponseEntity<?> view(@PathVariable Long id) {
         Recipe r = recipeRepository.findByIdAndIsPublicTrue(id)
@@ -56,7 +53,6 @@ public class FeedController {
         ));
     }
 
-    // GET /api/feed?page=0&size=20
     @GetMapping
     public ResponseEntity<?> feed(
             @RequestParam(defaultValue = "0") int page,
@@ -84,7 +80,7 @@ public class FeedController {
                             i.imageUrl(),
                             i.tags(),
                             i.likes(),
-                            likeRepository.findByUserIdAndRecipeId(uid, i.id()).isPresent(),
+                            likeRepository.findByUser_IdAndRecipe_Id(uid, i.id()).isPresent(),
                             i.views(),
                             i.source(),
                             i.createdAt()
@@ -95,7 +91,6 @@ public class FeedController {
         return ResponseEntity.ok(items);
     }
 
-    // GET /api/feed/search?q=abc&type=title|tags&page=0&size=20
     @GetMapping("/search")
     public ResponseEntity<?> search(
             @RequestParam String q,
@@ -133,7 +128,7 @@ public class FeedController {
                             i.imageUrl(),
                             i.tags(),
                             i.likes(),
-                            likeRepository.findByUserIdAndRecipeId(uid, i.id()).isPresent(),
+                            likeRepository.findByUser_IdAndRecipe_Id(uid, i.id()).isPresent(),
                             i.views(),
                             i.source(),
                             i.createdAt()
