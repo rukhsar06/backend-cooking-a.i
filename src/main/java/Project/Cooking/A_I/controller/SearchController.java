@@ -42,11 +42,10 @@ public class SearchController {
             @RequestParam(defaultValue = "20") int size,
             Authentication auth
     ) {
-        if (page < 0) page = 0;
-        if (size < 1) size = 1;
-        if (size > 50) size = 50;
+        page = Math.max(page, 0);
+        size = Math.min(Math.max(size, 1), 50);
 
-        String query = (q == null) ? "" : q.trim();
+        String query = q == null ? "" : q.trim();
         if (query.isBlank()) {
             return ResponseEntity.ok(Map.of(
                     "items", List.of(),
@@ -64,18 +63,17 @@ public class SearchController {
 
         var pageable = PageRequest.of(page, size);
 
-        // ✅ 1) LOCAL search (DTO ONLY -> avoids LOB crash)
+        // ✅ LOCAL SEARCH (DTO ONLY – no LOB crash)
         List<FeedRecipeDto> local = recipeRepository.searchTitle(query, pageable);
 
-        // Optional tag search top-up (also DTO)
         if (local.size() < size) {
             List<FeedRecipeDto> tagMatches = recipeRepository.searchTags(query, pageable);
-
             Set<Long> seen = new HashSet<>();
-            for (FeedRecipeDto d : local) seen.add(d.getId());
+
+            for (FeedRecipeDto d : local) seen.add(d.id());
 
             for (FeedRecipeDto d : tagMatches) {
-                if (d.getId() != null && seen.add(d.getId())) {
+                if (d.id() != null && seen.add(d.id())) {
                     local.add(d);
                 }
                 if (local.size() >= size) break;
@@ -85,71 +83,61 @@ public class SearchController {
         List<Map<String, Object>> out = new ArrayList<>();
 
         for (FeedRecipeDto r : local) {
-            // keep your likes logic same (count from likes table)
-            long likesCount = likeRepository.countByRecipeId(r.getId());
+            long likesCount = likeRepository.countByRecipeId(r.id());
             boolean likedByMe = false;
 
             if (myUserId != null) {
-                likedByMe = likeRepository.findByUserIdAndRecipeId(myUserId, r.getId()).isPresent();
+                likedByMe = likeRepository
+                        .findByUserIdAndRecipeId(myUserId, r.id())
+                        .isPresent();
             }
 
             Map<String, Object> m = new HashMap<>();
-            m.put("id", r.getId());
-            m.put("title", r.getTitle());
-            m.put("imageUrl", r.getImageUrl());
-            m.put("tags", r.getTags());
+            m.put("id", r.id());
+            m.put("title", r.title());
+            m.put("imageUrl", r.imageUrl());
+            m.put("tags", r.tags());
             m.put("likes", likesCount);
             m.put("likedByMe", likedByMe);
-            m.put("views", r.getViews());
-            m.put("source", r.getSource());
-            m.put("createdAt", r.getCreatedAt() == null ? null : r.getCreatedAt().toString());
-
+            m.put("views", r.views());
+            m.put("source", r.source());
+            m.put("createdAt", r.createdAt() == null ? null : r.createdAt().toString());
             m.put("isExternal", false);
             m.put("externalId", null);
 
             out.add(m);
         }
 
-        // ✅ 2) TOP UP WITH SPOONACULAR (never crash)
+        // ✅ Spoonacular top-up (never crash)
         int remaining = size - out.size();
-        String externalError = null;
 
         if (remaining > 0) {
-            int offset = page * size;
-
             try {
+                int offset = page * size;
                 var external = spoonacularClient.search(query, remaining, offset);
 
-                if (external != null) {
-                    for (var e : external) {
-                        Map<String, Object> m = new HashMap<>();
-                        m.put("id", null);
-                        m.put("title", e.getTitle());
-                        m.put("imageUrl", e.getImageUrl());
-                        m.put("tags", null);
-                        m.put("likes", 0);
-                        m.put("likedByMe", false);
-                        m.put("views", 0);
-                        m.put("source", "SPOONACULAR");
-                        m.put("createdAt", null);
-
-                        m.put("isExternal", true);
-                        m.put("externalId", e.getExternalId());
-
-                        out.add(m);
-                    }
+                for (var e : external) {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("id", null);
+                    m.put("title", e.getTitle());
+                    m.put("imageUrl", e.getImageUrl());
+                    m.put("tags", null);
+                    m.put("likes", 0);
+                    m.put("likedByMe", false);
+                    m.put("views", 0);
+                    m.put("source", "SPOONACULAR");
+                    m.put("createdAt", null);
+                    m.put("isExternal", true);
+                    m.put("externalId", e.getExternalId());
+                    out.add(m);
                 }
-            } catch (Exception ex) {
-                externalError = ex.getMessage();
-            }
+            } catch (Exception ignored) {}
         }
 
-        Map<String, Object> resp = new HashMap<>();
-        resp.put("items", out);
-        resp.put("localCount", local.size());
-        resp.put("externalCount", Math.max(0, out.size() - local.size()));
-        if (externalError != null) resp.put("externalError", externalError);
-
-        return ResponseEntity.ok(resp);
+        return ResponseEntity.ok(Map.of(
+                "items", out,
+                "localCount", local.size(),
+                "externalCount", Math.max(0, out.size() - local.size())
+        ));
     }
 }
